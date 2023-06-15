@@ -1,295 +1,284 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <stddef.h>
-#include <limits.h>
 
-#define TAB_SIZE  1000
-#define BUF_SIZE  1000
+// list node
+typedef struct Node {
+    int *data;
+    size_t array_size;
+    struct Node* next;
+    struct Node* prev;
+} Node;
 
-int get(int cols, int row, int col, const int *A) {
-    return A[row * cols + col];
+// doubly linked list
+typedef struct List {
+    Node *head;
+    Node *tail;
+} List;
+
+// iterator
+typedef struct iterator {
+    struct Node* node_ptr;
+    size_t position;
+} iterator;
+
+// forward initialization
+iterator begin(Node* head) {
+    iterator it = { head, 0 };
+    return it;
 }
 
-void set(int cols, int row, int col, int *A, int value) {
-    A[row * cols + col] = value;
+// backward initialization;
+// points to the element following the last one
+iterator end(Node* tail) {
+    iterator it = { tail, tail->array_size };
+    return it;
 }
 
-void prod_mat(int rowsA, int colsA, int colsB, int *A, int *B, int *AB) {
-    double sum;
-    for(int resultRow = 0; resultRow < rowsA; resultRow++) {
-        for(int resultCol = 0; resultCol < colsB; resultCol++) {
-            sum = 0;
-            for(int idx = 0; idx < colsA; idx++) {
-                sum += get(colsA, resultRow, idx, A) * get(colsB, idx, resultCol, B);
-            }
-            set(colsB, resultRow, resultCol, AB, sum);
+void *safe_malloc(size_t size) {
+    void *ptr = malloc(size);
+    if (ptr) return ptr;
+    exit(EXIT_FAILURE);
+}
+
+void *safe_realloc(void *old_ptr, size_t size) {
+    void *ptr = realloc(old_ptr, size);
+    if (ptr) return ptr;
+    free(old_ptr);
+    exit(EXIT_FAILURE);
+}
+
+Node *create_node(int *data, size_t array_size, Node *next, Node *prev) {
+    Node *node = safe_malloc(sizeof(Node));
+    node->data = data;
+    node->array_size = array_size;
+    node->next = next;
+    node->prev = prev;
+    return node;
+}
+
+// initialize list
+// creates the front and back sentinels
+void init(List *list) {
+    list->head = create_node(NULL, 0, NULL, NULL);
+    list->tail = create_node(NULL, 0, NULL, list->head);
+    list->head->next = list->tail;
+}
+
+// to implement ...
+
+// append node to the list
+void push_back(List *list, int *data, size_t array_size) {
+    Node *newNode = create_node(data, array_size, list->tail, list->tail->prev);
+    list->tail->prev->next = newNode;
+    list->tail->prev = newNode;
+}
+
+// set iterator to move n elements forward from its current position
+void skip_forward(iterator* itr, size_t n) {
+    while(itr->node_ptr->array_size < n) {
+        n-= itr->node_ptr->array_size;
+        itr->node_ptr = itr->node_ptr->next;
+    }
+
+    itr->position = n;
+}
+
+// forward iteration - get n-th element in the list
+int get_forward(List *list, size_t n) {
+    iterator itr = begin(list->head);
+    skip_forward(&itr, n);
+    return itr.node_ptr->data[itr.position - 1];
+}
+
+// set iterator to move n elements backward from its current position
+void skip_backward(iterator* itr, size_t n) {
+    while(itr->node_ptr->array_size < n) {
+        n-= itr->node_ptr->array_size;
+        itr->node_ptr = itr->node_ptr->prev;
+    }
+
+    itr->position = itr->node_ptr->array_size - n;
+}
+
+// backward iteration - get n-th element from the end of the list
+int get_backward(List *list, size_t n) {
+    iterator itr = end(list->tail);
+    skip_backward(&itr, n);
+    return itr.node_ptr->data[itr.position];
+}
+
+void remove_node(Node *node_ptr) {
+    free(node_ptr->data);
+    node_ptr->prev->next = node_ptr->next;
+    node_ptr->next->prev = node_ptr->prev;
+    free(node_ptr);
+}
+
+// remove n-th element; if array empty remove node
+void remove_at(List *list, size_t n) {
+    iterator itr = begin(list->head);
+    skip_forward(&itr, n);
+
+    if(itr.node_ptr->array_size == 1) {
+        remove_node(itr.node_ptr);
+    }
+    else {
+        for(int i = itr.position - 1; i < itr.node_ptr->array_size - 1; i++) {
+            itr.node_ptr->data[i] = itr.node_ptr->data[i + 1];
         }
+        itr.node_ptr->data = safe_realloc(itr.node_ptr->data, sizeof(int) * (--itr.node_ptr->array_size));
     }
 }
 
-void read_mat(int rows, int cols, int *t) {
-    for(int i = 0; i < rows; i++) {
-        for(int j = 0; j < cols; j++) {
-            scanf("%d", &t[i * cols + j]);
+// return the number of digits of number n
+size_t digits(int n) {
+    if(n < 0) {
+        n = -1 * n;
+    }
+
+    if(n == 0) return 1;
+    size_t size = 0;
+    while(n > 0) {
+        size += 1;
+        n /= 10;
+    }
+
+    return size;
+}
+
+int cmp(const void* a, const void* b) {
+    int intA = *((int*)a);
+    int intB = *((int*)b);
+
+    return intA - intB;
+}
+
+// inserts 'value' to the node with the same digits' count
+// otherwise insert new node
+void put_in_order(List *list, int value) {
+    size_t numSize = digits(value);
+    Node *node = list->head->next;
+
+    while(node != list->tail) {
+        if(numSize == digits(node->data[0])) {
+            node->data = safe_realloc(node->data, sizeof(int) * (node->array_size + 1));
+            node->array_size += 1;
+            node->data[node->array_size - 1] = value;
+            qsort(node->data, node->array_size, sizeof(int), cmp);
+            return;
         }
+        node = node->next;
     }
+
+    node = list->head->next;
+    while(node != list->tail && numSize > digits(node->data[0])) {
+        node = node->next;
+    }
+
+    int *data = safe_malloc(1);
+    data[0] = value;
+    Node *newNode = create_node(data, 1, node, node->prev);
+
+    node->prev->next = newNode;
+    node->prev = newNode;
 }
 
-void print_mat(int rows, int cols, int *t) {
-    for(int i = 0; i < rows; i++) {
-        for(int j = 0; j < cols - 1; j++) {
-            printf("%d ", get(cols, i, j, t));
+// -------------------------------------------------------------
+// helper functions
+
+// print list
+void dumpList(const List *list) {
+    for(Node *node = list->head->next; node != list->tail; node = node->next) {
+        printf("-> ");
+        for (int k = 0; k < node->array_size; k++) {
+            printf("%d ", node->data[k]);
         }
-        printf("%d\n", get(cols, i, cols - 1, t));
+        printf("\n");
     }
 }
 
-int read_char_lines(char *array[]) {
-    int char_lines = 0;
-    while(1) {
-        char *line = malloc(BUF_SIZE * sizeof(char));
-        if(fgets(line, BUF_SIZE, stdin) == NULL) {
-            break;
-        }
-
-        array[char_lines++] = line;
-    }
-
-    return char_lines;
-}
-
-void write_char_line(char *array[], int n) {
-    char *line_ptr = array[n];
-    while(*line_ptr != 0) {
-        printf("%c", *line_ptr);
-        line_ptr++;
+// free list
+void freeList(List *list) {
+    Node *to_delete = list->head->next, *next;
+    while(to_delete != list->tail) {
+        next = to_delete->next;
+        remove_node(to_delete);
+        to_delete = next;
     }
 }
 
-void delete_lines(char *array[], int n) {
-    for(int i = 0; i < n; i++) {
-        free(array[i]);
+// read int vector
+void read_vector(int tab[], size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        scanf("%d", tab + i);
     }
 }
 
-int read_int_lines_cont(int *ptr_array[]) {
-    int num_lines = 0;
-    char line[BUF_SIZE];
-
-    while(fgets(line, BUF_SIZE, stdin) != NULL) {
-        int num_count = 0;
-        int *nums = malloc(BUF_SIZE * sizeof(int));
-
-        char* token = strtok(line, " ");
-        while(token != NULL) {
-            nums[num_count++] = atoi(token);
-            token = strtok(NULL, " ");
-        }
-        if(num_count < BUF_SIZE - 1) {
-            /* To differentiate NULL = 0 from 0 as value,
-             * now condition to end printing would be
-             * ... != INT_MIN */
-            nums[num_count] = INT_MIN;
-        }
-
-        ptr_array[num_lines++] = nums;
-    }
-
-    return num_lines;
-}
-
-void write_int_line_cont(int *ptr_array[], int n) {
-    int *line_ptr = ptr_array[n];
-    int idx = 0;
-    while(idx < BUF_SIZE && *(line_ptr + idx) != INT_MIN){
-        printf("%d ", *(line_ptr + idx++));
-    }
-    printf("\n");
-}
-
-typedef struct {
-    int *values;
-    int len;
-    double average;
-} line_type;
-
-int read_int_lines(line_type lines_array[]) {
-    int num_lines = 0;
-    char line[BUF_SIZE];
-
-    while(fgets(line, BUF_SIZE, stdin) != NULL) {
-        lines_array[num_lines].len = 0;
-        lines_array[num_lines].average = 0;
-        lines_array[num_lines].values = (int*)malloc(BUF_SIZE * sizeof(int));
-
-        char* token = strtok(line, " ");
-        while(token != NULL) {
-            lines_array[num_lines].values[lines_array[num_lines].len++] = atoi(token);
-            token = strtok(NULL, " ");
-        }
-        for(int i = 0; i < lines_array[num_lines].len; i++) {
-            lines_array[num_lines].average += lines_array[num_lines].values[i];
-        }
-        lines_array[num_lines].average  /= lines_array[num_lines].len;
-        num_lines++;
-    }
-
-    return num_lines;
-}
-
-void write_int_line(line_type lines_array[], int n) {
-    for(int i = 0; i < lines_array[n].len; i++) {
-        printf("%d ", lines_array[n].values[i]);
-    }
-    printf("\n%.2f\n", lines_array[n].average);
-}
-
-void delete_int_lines(line_type array[], int line_count) {
-    for(int i = 0; i < line_count; i++) {
-        free(array[i].values);
+// initialize the list and push data
+void read_list(List *list) {
+    int n;
+    size_t size;
+    scanf("%d", &n); // number of nodes
+    for (int i = 0; i < n; i++) {
+        scanf("%zu", &size); // length of the array in i-th node
+        int *tab = (int*) safe_malloc(size * sizeof(int));
+        read_vector(tab, size);
+        push_back(list, tab, size);
     }
 }
 
-int cmp (const void *a, const void *b) {
-    line_type *aa = (line_type*)a;
-    line_type *bb = (line_type*)b;
-    return aa->average > bb->average ? 1 :
-        aa->average == bb->average ? 0 : -1;
-}
+int main() {
+    int to_do, value;
+    size_t size, m;
+    List list;
+    init(&list);
 
-void sort_by_average(line_type lines_array[], int line_count) {
-    qsort(lines_array, line_count, sizeof(line_type), cmp);
-}
-
-typedef struct {
-    int r, c, v;
-} triplet;
-
-int read_sparse(triplet *triplet_array, int n_triplets) {
-    for(int i = 0; i < n_triplets; i++) {
-        scanf("%d %d %d", &triplet_array[i].r, &triplet_array[i].c, &triplet_array[i].v);
-    }
-
-    return n_triplets;
-}
-
-int cmp_triplets(const void *t1, const void *t2) {
-    triplet *tt1 = (triplet*)t1;
-    triplet *tt2 = (triplet*)t2;
-
-    int rows = tt1->r - tt2->r;
-    int cols = tt1->c - tt2->c;
-
-    return rows != 0 ? rows : cols;
-}
-
-void make_CSR(triplet *triplet_array, int n_triplets, int rows, int *V, int *C, int *R) {
-
-    qsort(triplet_array, n_triplets, sizeof(triplet), cmp_triplets);
-
-    for(int i = 0; i < n_triplets; i++) {
-        C[i] = triplet_array[i].c;
-        V[i] = triplet_array[i].v;
-    }
-
-    R[0] = 0;
-    int sum = 0;
-    for(int i = 1; i <= rows; i++) {
-        for(int j = 0; j < n_triplets; j++) {
-            if(triplet_array[j].r == i - 1) {
-                sum++;
-            }
-        }
-        R[i] = sum;
-    }
-}
-
-void multiply_by_vector(int rows, const int *V, const int *C, const int *R, const int *x, int *y) {
-    for(int i = 0; i < rows; i++) {
-        y[i] = 0;
-        for(int j = R[i]; j < R[i + 1]; j++) {
-            y[i] += V[j] * x[C[j]];
-        }
-    }
-}
-
-void read_vector(int *v, int n) {
-    for(int i = 0; i < n; i++) {
-        scanf("%d", &v[i]);
-    }
-}
-
-void write_vector(int *v, int n) {
-    for(int i = 0; i < n; i++) {
-        printf("%d ", v[i]);
-    }
-    printf("\n");
-}
-
-int read_int() {
-    char c_buf[BUF_SIZE];
-    fgets(c_buf, BUF_SIZE, stdin);
-    return (int)strtol(c_buf, NULL, 10);
-}
-
-int main(void) {
-    int to_do = read_int();
-
-    int A[TAB_SIZE], B[TAB_SIZE], AB[TAB_SIZE];
-    int n, lines_counter, rowsA, colsA, rowsB, colsB;
-    int rows, cols, n_triplets;
-    char *char_lines_array[TAB_SIZE] = { NULL };
-    int continuous_array[TAB_SIZE];
-    int *ptr_array[TAB_SIZE];
-    triplet triplet_array[TAB_SIZE];
-    int V[TAB_SIZE], C[TAB_SIZE], R[TAB_SIZE];
-    int x[TAB_SIZE], y[TAB_SIZE];
-    line_type int_lines_array[TAB_SIZE];
-
+    scanf("%d", &to_do);
     switch (to_do) {
         case 1:
-            scanf("%d %d", &rowsA, &colsA);
-            read_mat(rowsA, colsA, A);
-            scanf("%d %d", &rowsB, &colsB);
-            read_mat(rowsB, colsB, B);
-            prod_mat(rowsA, colsA, colsB, A, B, AB);
-            print_mat(rowsA, colsB, AB);
+            read_list(&list);
+            dumpList(&list);
             break;
         case 2:
-            n = read_int() - 1; // we count from 1 :)
-            ptr_array[0] = continuous_array;
-            read_int_lines_cont(ptr_array);
-            write_int_line_cont(ptr_array, n);
+            read_list(&list);
+            scanf("%zu", &size);
+            for (int i = 0; i < size; i++) {
+                scanf("%zu", &m);
+                printf("%d ", get_forward(&list, m));
+            }
+            printf("\n");
             break;
         case 3:
-            n = read_int() - 1;
-            read_char_lines(char_lines_array);
-            write_char_line(char_lines_array, n);
-            delete_lines(char_lines_array, n);
+            read_list(&list);
+            scanf("%zu", &size);
+            for (int i = 0; i < size; i++) {
+                scanf("%zu", &m);
+                printf("%d ", get_backward(&list, m));
+            }
+            printf("\n");
             break;
         case 4:
-            n = read_int() - 1;
-            lines_counter = read_int_lines(int_lines_array);
-            sort_by_average(int_lines_array, lines_counter);
-            write_int_line(int_lines_array, n);
-            delete_int_lines(int_lines_array, lines_counter);
+            read_list(&list);
+            scanf("%zu", &size);
+            for (int i = 0; i < size; i++) {
+                scanf("%zu", &m);
+                remove_at(&list, m);
+            }
+            dumpList(&list);
             break;
         case 5:
-            scanf("%d %d %d", &rows, &cols, &n_triplets);
-            n_triplets = read_sparse(triplet_array, n_triplets);
-            read_vector(x, cols);
-            make_CSR(triplet_array, n_triplets, rows, V, C, R);
-            multiply_by_vector(rows, V, C, R, x, y);
-            write_vector(V, n_triplets);
-            write_vector(C, n_triplets);
-            write_vector(R, rows + 1);
-            write_vector(y, rows);
+            scanf("%zu", &size);
+            for (int i = 0; i < size; i++) {
+                scanf("%d", &value);
+                put_in_order(&list, value);
+            }
+            dumpList(&list);
             break;
         default:
             printf("NOTHING TO DO FOR %d\n", to_do);
             break;
     }
+    freeList(&list);
+
     return 0;
 }
-
